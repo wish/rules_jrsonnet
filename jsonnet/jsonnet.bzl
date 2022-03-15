@@ -825,7 +825,12 @@ def jsonnet_repositories():
     """Adds the external dependencies needed for the Jsonnet rules."""
 
     http_file(
-        name = "jrsonnet",
+        name = "jrsonnet_macos",
         sha256= "9624407b7cc50dd306c1fa5ffb194c5b6ff8be5ed6ed563dd3decefafcba8fa7",
         urls = ["https://github.com/CertainLach/jrsonnet/releases/download/v0.4.2/jrsonnet-darwin-amd64"]
+    )
+
+    http_file(
+        name = "jrsonnet_docker",
+        urls = ["/bin/jrsonnet"]
     )

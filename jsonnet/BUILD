@@ -10,16 +10,9 @@ py_binary(
 )
 
 config_setting(
-    name = "port_cpp",
+    name = "docker",
     define_values = {
-        "jsonnet_port": "cpp",
-    },
-)
-
-config_setting(
-    name = "port_go",
-    define_values = {
-        "jsonnet_port": "go",
+        "platform": "docker",
     },
 )
 
@@ -33,8 +26,7 @@ config_setting(
 alias(
     name = "jsonnet_tool",
     actual = select({
-   #     "//jsonnet:port_cpp": "@jsonnet//cmd:jsonnet",
-    #    "//conditions:default": "@google_jsonnet_go//cmd/jsonnet",
-        "//conditions:default": "@jrsonnet//file"
+        "//jsonnet:docker": "@jsonnet_docker//file",
+        "//conditions:default": "@jrsonnet_macos//file"
     }),
 )
