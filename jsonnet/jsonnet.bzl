@@ -87,7 +87,7 @@ def _jsonnet_library_impl(ctx):
 
 def _jsonnet_toolchain(ctx):
     return struct(
-        jsonnet_path = ctx.executable.jsonnet.path,
+        jsonnet_path = "jrsonnet"
     )
 
 def _quote(s):
@@ -247,12 +247,11 @@ def _jsonnet_to_json_impl(ctx):
         depinfo.transitive_sources.to_list()
     )
 
-    tools = [ctx.executable.jsonnet]
+    #tools = [ctx.executable.jsonnet]
 
     #ctx.actions.run(tools=[ctx.executable.jsonnet], outputs=outputs, mnemonic = "Jsonnet", executable = ctx.executable.jsonnet.path)
     ctx.actions.run_shell(
         inputs = compile_inputs + stamp_inputs,
-        tools = tools,
         outputs = outputs,
         mnemonic = "Jsonnet",
         command = " ".join(command),
@@ -431,12 +430,6 @@ _jsonnet_common_attrs = {
         allow_files = True,
     ),
     "imports": attr.string_list(),
-    "jsonnet": attr.label(
-        default = Label("//jsonnet:jsonnet_tool"),
-        cfg = "host",
-        executable = True,
-        allow_single_file = True,
-    ),
     "deps": attr.label_list(
         providers = ["transitive_jsonnet_files"],
         allow_files = False,
@@ -820,17 +813,3 @@ Example:
 
   To run the test: `bazel test //config:invalid_config_test`
 """
-
-def jsonnet_repositories():
-    """Adds the external dependencies needed for the Jsonnet rules."""
-
-    http_file(
-        name = "jrsonnet_macos",
-        sha256= "9624407b7cc50dd306c1fa5ffb194c5b6ff8be5ed6ed563dd3decefafcba8fa7",
-        urls = ["https://github.com/CertainLach/jrsonnet/releases/download/v0.4.2/jrsonnet-darwin-amd64"]
-    )
-
-    http_file(
-        name = "jrsonnet_docker",
-        urls = ["/bin/jrsonnet"]
-    )
