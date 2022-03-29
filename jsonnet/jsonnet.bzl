@@ -179,7 +179,6 @@ def _jsonnet_to_json_impl(ctx):
     path_cmd_var = ":".join(search_path)
     command = (
         [
-            "chmod +x %s;" % toolchain.jsonnet_path,
             "set -e;",
             toolchain.jsonnet_path,
         ] + ["-J ."] + other_args +
