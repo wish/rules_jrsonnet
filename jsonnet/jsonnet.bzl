@@ -34,6 +34,12 @@ _JSONNET_FILETYPE = [
     ".json",
 ]
 
+_STRING_STYLE = [
+    "d",
+    "s",
+    "l"
+]
+
 def _add_prefix_to_imports(label, imports):
     imports_prefix = ""
     if label.workspace_root:
@@ -83,11 +89,6 @@ def _jsonnet_library_impl(ctx):
             collect_data = True,
         ),
         transitive_jsonnet_files = sources,
-    )
-
-def _jsonnet_toolchain(ctx):
-    return struct(
-        jsonnet_path = "jrsonnet"
     )
 
 def _quote(s):
@@ -148,7 +149,7 @@ def _jsonnet_to_json_impl(ctx):
         print("'code_vars' attribute is deprecated, please use 'ext_code'.")
 
     depinfo = _setup_deps(ctx.attr.deps)
-    toolchain = _jsonnet_toolchain(ctx)
+    path=ctx.toolchains["@rules_jrsonnet//jrsonnet_toolchain:toolchain"].path
     jsonnet_ext_strs = ctx.attr.ext_strs or ctx.attr.vars
     jsonnet_ext_str_envs = ctx.attr.ext_str_envs
     jsonnet_ext_code = ctx.attr.ext_code or ctx.attr.code_vars
@@ -180,7 +181,7 @@ def _jsonnet_to_json_impl(ctx):
     command = (
         [
             "set -e;",
-            toolchain.jsonnet_path,
+            path,
         ] + ["-J ."] + other_args +
         ["--ext-str %s=%s" %
          (_quote(key), _quote(val)) for key, val in jsonnet_ext_strs.items()] +
@@ -246,10 +247,9 @@ def _jsonnet_to_json_impl(ctx):
         depinfo.transitive_sources.to_list()
     )
 
-    #tools = [ctx.executable.jsonnet]
 
-    #ctx.actions.run(tools=[ctx.executable.jsonnet], outputs=outputs, mnemonic = "Jsonnet", executable = ctx.executable.jsonnet.path)
     ctx.actions.run_shell(
+        tools = [ctx.toolchains["@rules_jrsonnet//jrsonnet_toolchain:toolchain"].binary],
         inputs = compile_inputs + stamp_inputs,
         outputs = outputs,
         mnemonic = "Jsonnet",
@@ -296,133 +296,6 @@ if [[ ! "$OUTPUT" =~ $GOLDEN_REGEX ]]; then
   exit 1
 fi
 """
-
-def _jsonnet_to_json_test_impl(ctx):
-    """Implementation of the jsonnet_to_json_test rule."""
-    depinfo = _setup_deps(ctx.attr.deps)
-    toolchain = _jsonnet_toolchain(ctx)
-
-    golden_files = []
-    diff_command = ""
-    if ctx.file.golden:
-        golden_files += [ctx.file.golden]
-
-        # Note that we only run jsonnet to canonicalize the golden output if the
-        # expected return code is 0, and canonicalize_golden was not explicitly disabled.
-        # Otherwise, the golden file contains the
-        # expected error output.
-
-        # For legacy reasons, we also disable canonicalize_golden for yaml_streams.
-        canonicalize = not (ctx.attr.yaml_stream or not ctx.attr.canonicalize_golden)
-        dump_golden_cmd = (ctx.executable.jsonnet.short_path if ctx.attr.error == 0 and canonicalize else "/bin/cat")
-        if ctx.attr.regex:
-            diff_command = _REGEX_DIFF_COMMAND % (
-                dump_golden_cmd,
-                ctx.file.golden.short_path,
-                ctx.label.name,
-                "true" if ctx.attr.output_file_contents else "false",
-            )
-        else:
-            diff_command = _DIFF_COMMAND % (
-                dump_golden_cmd,
-                ctx.file.golden.short_path,
-                ctx.label.name,
-                "true" if ctx.attr.output_file_contents else "false",
-            )
-
-    jsonnet_ext_str_envs = ctx.attr.ext_str_envs
-    jsonnet_ext_code_envs = ctx.attr.ext_code_envs
-    jsonnet_ext_str_files = ctx.files.ext_str_files
-    jsonnet_ext_str_file_vars = ctx.attr.ext_str_file_vars
-    jsonnet_ext_code_files = ctx.files.ext_code_files
-    jsonnet_ext_code_file_vars = ctx.attr.ext_code_file_vars
-    jsonnet_tla_str_envs = ctx.attr.tla_str_envs
-    jsonnet_tla_code_envs = ctx.attr.tla_code_envs
-    jsonnet_tla_str_files = ctx.attr.tla_str_files
-    jsonnet_tla_code_files = ctx.attr.tla_code_files
-
-    jsonnet_ext_strs, strs_stamp_inputs = _make_stamp_resolve(ctx.attr.ext_strs, ctx, True)
-    jsonnet_ext_code, code_stamp_inputs = _make_stamp_resolve(ctx.attr.ext_code, ctx, True)
-    jsonnet_tla_strs, tla_strs_stamp_inputs = _make_stamp_resolve(ctx.attr.tla_strs, ctx, True)
-    jsonnet_tla_code, tla_code_stamp_inputs = _make_stamp_resolve(ctx.attr.tla_code, ctx, True)
-    stamp_inputs = strs_stamp_inputs + code_stamp_inputs + tla_strs_stamp_inputs + tla_code_stamp_inputs
-
-    other_args = ctx.attr.extra_args + (["-y"] if ctx.attr.yaml_stream else [])
-    jsonnet_command = " ".join(
-        ["OUTPUT=$(%s" % ctx.executable.jsonnet.short_path] +
-        ["-J %s" % im for im in _add_prefix_to_imports(ctx.label, ctx.attr.imports)] +
-        ["-J %s" % im for im in depinfo.imports.to_list()] + ["-J ."] +
-        other_args +
-        ["--ext-str %s=%s" %
-         (_quote(key), _quote(val)) for key, val in jsonnet_ext_strs.items()] +
-        ["--ext-str %s" %
-         ext_str_env for ext_str_env in jsonnet_ext_str_envs] +
-        ["--ext-code %s=%s" %
-         (_quote(key), _quote(val)) for key, val in jsonnet_ext_code.items()] +
-        ["--ext-code %s" %
-         ext_code_env for ext_code_env in jsonnet_ext_code_envs] +
-        ["--ext-str-file %s=%s" %
-         (var, jfile.path) for var, jfile in zip(jsonnet_ext_str_file_vars, jsonnet_ext_str_files)] +
-        ["--ext-code-file %s=%s" %
-         (var, jfile.path) for var, jfile in zip(jsonnet_ext_code_file_vars, jsonnet_ext_code_files)] +
-        ["--tla-str %s=%s" %
-         (_quote(key), _quote(val)) for key, val in jsonnet_tla_strs.items()] +
-        ["--tla-str '%s'" %
-         tla_str_env for tla_str_env in jsonnet_tla_str_envs] +
-        ["--tla-code %s=%s" %
-         (_quote(key), _quote(val)) for key, val in jsonnet_tla_code.items()] +
-        ["--tla-code %s" %
-         tla_code_env for tla_code_env in jsonnet_tla_code_envs] +
-        ["--tla-str-file %s=%s" %
-         (var, jfile.files.to_list()[0].path) for jfile, var in jsonnet_tla_str_files.items()] +
-        ["--tla-code-file %s=%s" %
-         (var, jfile.files.to_list()[0].path) for jfile, var in jsonnet_tla_code_files.items()] +
-        [
-            ctx.file.src.short_path,
-            "2>&1)",
-        ],
-    )
-
-    command = [
-        "#!/bin/bash",
-        jsonnet_command,
-        _EXIT_CODE_COMPARE_COMMAND % (
-            ctx.attr.error,
-            ctx.label.name,
-            "true" if ctx.attr.output_file_contents else "false",
-        ),
-    ]
-    if diff_command:
-        command += [diff_command]
-
-    ctx.actions.write(
-        output = ctx.outputs.executable,
-        content = "\n".join(command),
-        is_executable = True,
-    )
-
-    transitive_data = depset(
-        transitive = [dep.data_runfiles.files for dep in ctx.attr.deps] +
-                     [l.files for l in jsonnet_tla_code_files.keys()] +
-                     [l.files for l in jsonnet_tla_str_files.keys()],
-    )
-
-    test_inputs = (
-        [ctx.file.src, ctx.executable.jsonnet] + golden_files +
-        transitive_data.to_list() +
-        depinfo.transitive_sources.to_list() +
-        jsonnet_ext_str_files +
-        jsonnet_ext_code_files +
-        stamp_inputs
-    )
-
-    return struct(
-        runfiles = ctx.runfiles(
-            files = test_inputs,
-            transitive_files = transitive_data,
-            collect_data = True,
-        ),
-    )
 
 _jsonnet_common_attrs = {
     "data": attr.label_list(
@@ -532,283 +405,39 @@ jsonnet_to_json = rule(
     attrs = dict(_jsonnet_compile_attrs.items() +
                  _jsonnet_to_json_attrs.items() +
                  _jsonnet_common_attrs.items()),
+    toolchains = ["@rules_jrsonnet//jrsonnet_toolchain:toolchain"]
 )
 
-"""Compiles Jsonnet code to JSON.
 
-Args:
-  name: A unique name for this rule.
-
-    This name will be used as the name of the JSON file generated by this rule.
-  src: The `.jsonnet` file to convert to JSON.
-  deps: List of targets that are required by the `src` Jsonnet file.
-  outs: Names of the output `.json` files to be generated by this rule.
-
-    If you are generating only a single JSON file and are not using jsonnet
-    multiple output files, then this attribute should only contain the file
-    name of the JSON file you are generating.
-
-    If you are generating multiple JSON files using jsonnet multiple file output
-    (`jsonnet -m`), then list the file names of all the JSON files to be
-    generated. The file names specified here must match the file names
-    specified in your `src` Jsonnet file.
-
-    For the case where multiple file output is used but only for generating one
-    output file, set the `multiple_outputs` attribute to 1 to explicitly enable
-    the `-m` flag for multiple file output.
-  multiple_outputs: Set to 1 to explicitly enable multiple file output via the
-    `jsonnet -m` flag.
-
-    This is used for the case where multiple file output is used but only for
-    generating a single output file. For example:
-
-    ```
-    local foo = import "foo.jsonnet";
-
-    {
-      "foo.json": foo,
-    }
-    ```
-  imports: List of import `-J` flags to be passed to the `jsonnet` compiler.
-  vars: *Deprecated* Use `ext_strs`.  Map of variables to pass to jsonnet via
-    `--var key=value` flags. Values containing make variables will be expanded.
-  code_vars: *Deprecated* Use `ext_code`.  Map of code variables to pass to
-    jsonnet via `--code-var key-value` flags.
-
-Example:
-  ### Example
-
-  Suppose you have the following directory structure:
-
-  ```
-  [workspace]/
-      WORKSPACE
-      workflows/
-          BUILD
-          workflow.libsonnet
-          wordcount.jsonnet
-          intersection.jsonnet
-  ```
-
-  Say that `workflow.libsonnet` is a base configuration library for a workflow
-  scheduling system and `wordcount.jsonnet` and `intersection.jsonnet` both
-  import `workflow.libsonnet` to define workflows for performing a wordcount and
-  intersection of two files, respectively.
-
-  First, create a `jsonnet_library` target with `workflow.libsonnet`:
-
-  `workflows/BUILD`:
-
-  ```python
-  load("@io_bazel_rules_jsonnet//jsonnet:jsonnet.bzl", "jsonnet_library")
-
-  jsonnet_library(
-      name = "workflow",
-      srcs = ["workflow.libsonnet"],
-  )
-  ```
-
-  To compile `wordcount.jsonnet` and `intersection.jsonnet` to JSON, define two
-  `jsonnet_to_json` targets:
-
-  ```python
-  jsonnet_to_json(
-      name = "wordcount",
-      src = "wordcount.jsonnet",
-      outs = ["wordcount.json"],
-      deps = [":workflow"],
-  )
-
-  jsonnet_to_json(
-      name = "intersection",
-      src = "intersection.jsonnet",
-      outs = ["intersection.json"],
-      deps = [":workflow"],
-  )
-  ```
-
-  ### Example: Multiple output files
-
-  To use Jsonnet's [multiple output files][multiple-output-files], suppose you
-  add a file `shell-workflows.jsonnet` that imports `wordcount.jsonnet` and
-  `intersection.jsonnet`:
-
-  `workflows/shell-workflows.jsonnet`:
-
-  ```
-  local wordcount = import "workflows/wordcount.jsonnet";
-  local intersection = import "workflows/intersection.jsonnet";
-
-  {
-    "wordcount-workflow.json": wordcount,
-    "intersection-workflow.json": intersection,
-  }
-  ```
-
-  To compile `shell-workflows.jsonnet` into the two JSON files,
-  `wordcount-workflow.json` and `intersection-workflow.json`, first create a
-  `jsonnet_library` target containing the two files that
-  `shell-workflows.jsonnet` depends on:
-
-  ```python
-  jsonnet_library(
-      name = "shell-workflows-lib",
-      srcs = [
-          "wordcount.jsonnet",
-          "intersection.jsonnet",
-      ],
-      deps = [":workflow"],
-  )
-  ```
-
-  Then, create a `jsonnet_to_json` target and set `outs` to the list of output
-  files to indicate that multiple output JSON files are generated:
-
-  ```python
-  jsonnet_to_json(
-      name = "shell-workflows",
-      src = "shell-workflows.jsonnet",
-      deps = [":shell-workflows-lib"],
-      outs = [
-          "wordcount-workflow.json",
-          "intersection-workflow.json",
-      ],
-  )
-  ```
-
-  [multiple-output-files]: http://google.github.io/jsonnet/doc/commandline.html
-"""
-
-_jsonnet_to_json_test_attrs = {
-    "error": attr.int(),
-    "golden": attr.label(allow_single_file = True),
-    "regex": attr.bool(),
-    "canonicalize_golden": attr.bool(default = True),
-    "output_file_contents": attr.bool(default = True),
+_jsonnetfmt_attrs = {
+    "jsonnetfmt": attr.label(
+        doc = "jsonnetfmt binary",
+        cfg = "exec",
+        executable = True,
+        allow_single_file = True,
+        default = Label("@jsonnetfmt//cmd/jsonnetfmt")
+    ),
 }
 
-jsonnet_to_json_test = rule(
-    _jsonnet_to_json_test_impl,
-    attrs = dict(_jsonnet_compile_attrs.items() +
-                 _jsonnet_to_json_test_attrs.items() +
-                 _jsonnet_common_attrs.items()),
-    executable = True,
-    test = True,
+JSONNET_FMT_CODE = '''
+cd $BUILD_WORKSPACE_DIRECTORY
+find . -name '*.jsonnet' | xargs {path} --string-style l -i
+find . ! -path './lib/images/*' -name '*.libsonnet' | xargs {path} --string-style l -i
+find . -name '_namespace.jsonnet' | xargs {path} -i
+'''
+
+# Bazel does not allow modify files in place when executing bazel build, but allows it during bazel run, so this is a workaround hack.
+# this rule generates a bash script with the jsonnetfmt code and the path of the jsonnetfmt binary which is compiled by bazel (without needing user install)
+# the bash script can then be executed using bazel run to format in place.
+def _jsonnetfmt_impl(ctx):
+    jsonnetfmt_path = ctx.executable.jsonnetfmt.path
+
+    content = JSONNET_FMT_CODE.format(path = jsonnetfmt_path)
+    out = ctx.actions.declare_file("format.sh")
+    ctx.actions.write(out,content,is_executable=True)
+    return [DefaultInfo(files=depset([out]))]
+
+jsonnetfmt = rule(
+    _jsonnetfmt_impl,
+    attrs = _jsonnetfmt_attrs
 )
-
-"""Compiles Jsonnet code to JSON and checks the output.
-
-Args:
-  name: A unique name for this rule.
-
-    This name will be used as the name of the JSON file generated by this rule.
-  src: The `.jsonnet` file to convert to JSON.
-  deps: List of targets that are required by the `src` Jsonnet file.
-  imports: List of import `-J` flags to be passed to the `jsonnet` compiler.
-  vars: *Deprecated* Use `ext_strs`.  Map of variables to pass to jsonnet via
-    `--var key=value` flags. Values containing make variables will be expanded.
-  code_vars: *Deprecated* Use `ext_code`.  Map of code variables to pass to'
-    jsonnet via `--code-var key-value` flags.
-  golden: The expected (combined stdout and stderr) output to compare to the
-    output of running `jsonnet` on `src`.
-  error: The expected error code from running `jsonnet` on `src`.
-  regex: Set to 1 if `golden` contains a regex used to match the output of
-    running `jsonnet` on `src`.
-
-Example:
-  Suppose you have the following directory structure:
-
-  ```
-  [workspace]/
-      WORKSPACE
-      config/
-          BUILD
-          base_config.libsonnet
-          test_config.jsonnet
-          test_config.json
-  ```
-
-  Suppose that `base_config.libsonnet` is a library Jsonnet file, containing the
-  base configuration for a service. Suppose that `test_config.jsonnet` is a test
-  configuration file that is used to test `base_config.jsonnet`, and
-  `test_config.json` is the expected JSON output from compiling
-  `test_config.jsonnet`.
-
-  The `jsonnet_to_json_test` rule can be used to verify that compiling a Jsonnet
-  file produces the expected JSON output. Simply define a `jsonnet_to_json_test`
-  target and provide the input test Jsonnet file and the `golden` file containing
-  the expected JSON output:
-
-  `config/BUILD`:
-
-  ```python
-  load(
-      "@io_bazel_rules_jsonnet//jsonnet:jsonnet.bzl",
-      "jsonnet_library",
-      "jsonnet_to_json_test",
-  )
-
-  jsonnet_library(
-      name = "base_config",
-      srcs = ["base_config.libsonnet"],
-  )
-
-  jsonnet_to_json_test(
-      name = "test_config_test",
-      src = "test_config",
-      deps = [":base_config"],
-      golden = "test_config.json",
-  )
-  ```
-
-  To run the test: `bazel test //config:test_config_test`
-
-  ### Example: Negative tests
-
-  Suppose you have the following directory structure:
-
-  ```
-  [workspace]/
-      WORKSPACE
-      config/
-          BUILD
-          base_config.libsonnet
-          invalid_config.jsonnet
-          invalid_config.output
-  ```
-
-  Suppose that `invalid_config.jsonnet` is a Jsonnet file used to verify that
-  an invalid config triggers an assertion in `base_config.jsonnet`, and
-  `invalid_config.output` is the expected error output.
-
-  The `jsonnet_to_json_test` rule can be used to verify that compiling a Jsonnet
-  file results in an expected error code and error output. Simply define a
-  `jsonnet_to_json_test` target and provide the input test Jsonnet file, the
-  expected error code in the `error` attribute, and the `golden` file containing
-  the expected error output:
-
-  `config/BUILD`:
-
-  ```python
-  load(
-      "@io_bazel_rules_jsonnet//jsonnet:jsonnet.bzl",
-      "jsonnet_library",
-      "jsonnet_to_json_test",
-  )
-
-  jsonnet_library(
-      name = "base_config",
-      srcs = ["base_config.libsonnet"],
-  )
-
-  jsonnet_to_json_test(
-      name = "invalid_config_test",
-      src = "invalid_config",
-      deps = [":base_config"],
-      golden = "invalid_config.output",
-      error = 1,
-  )
-  ```
-
-  To run the test: `bazel test //config:invalid_config_test`
-"""
