@@ -407,37 +407,3 @@ jsonnet_to_json = rule(
                  _jsonnet_common_attrs.items()),
     toolchains = ["@rules_jrsonnet//jrsonnet_toolchain:toolchain"]
 )
-
-
-_jsonnetfmt_attrs = {
-    "jsonnetfmt": attr.label(
-        doc = "jsonnetfmt binary",
-        cfg = "exec",
-        executable = True,
-        allow_single_file = True,
-        default = Label("@jsonnetfmt//cmd/jsonnetfmt")
-    ),
-}
-
-JSONNET_FMT_CODE = '''
-cd $BUILD_WORKSPACE_DIRECTORY
-find . -name '*.jsonnet' | xargs {path} --string-style l -i
-find . ! -path './lib/images/*' -name '*.libsonnet' | xargs {path} --string-style l -i
-find . -name '_namespace.jsonnet' | xargs {path} -i
-'''
-
-# Bazel does not allow modify files in place when executing bazel build, but allows it during bazel run, so this is a workaround hack.
-# this rule generates a bash script with the jsonnetfmt code and the path of the jsonnetfmt binary which is compiled by bazel (without needing user install)
-# the bash script can then be executed using bazel run to format in place.
-def _jsonnetfmt_impl(ctx):
-    jsonnetfmt_path = ctx.executable.jsonnetfmt.path
-
-    content = JSONNET_FMT_CODE.format(path = jsonnetfmt_path)
-    out = ctx.actions.declare_file("format.sh")
-    ctx.actions.write(out,content,is_executable=True)
-    return [DefaultInfo(files=depset([out]))]
-
-jsonnetfmt = rule(
-    _jsonnetfmt_impl,
-    attrs = _jsonnetfmt_attrs
-)
