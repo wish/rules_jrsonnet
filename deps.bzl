@@ -26,10 +26,24 @@ def import_dependencies():
         executable = True
     )
 
-    http_archive(
-        name = "jsonnetfmt",
-        sha256 = "40347c519fd2cfe26547141776230af9be7ba6c47d15940419b771dc394765dd",
-        urls = ["https://github.com/google/go-jsonnet/archive/refs/tags/v0.18.0.zip"],
-        strip_prefix = "go-jsonnet-0.18.0"
+    http_file(
+        name = "jsonnetfmt_macos",
+        sha256 = "c0433d613314834822f534c76e8b3d09e9373e4a49ce445f1c1f19c99b47f918",
+        urls = ["https://github.com/wish/rules_jrsonnet/releases/download/v0.5.0/jsonnetfmt_darwin_x86"],
+        executable = True
+    )
+
+    http_file(
+        name = "jsonnetfmt_linux_x86",
+        sha256 = "16cc4bd674329c5b6bcce41dbc7df2864021071353c0bfaf7dc8fa1da8e437f8",
+        urls = ["https://github.com/wish/rules_jrsonnet/releases/download/v0.5.0/jsonnetfmt_linux_x86"],
+        executable = True
+    )
+    
+    http_file(
+        name = "jsonnetfmt_linux_arm64",
+        sha256 = "3d25cafa90b66c0350208bbc6a131cb387675ef7108a777f18b31be45cc2b52d",
+        urls = ["https://github.com/wish/rules_jrsonnet/releases/download/v0.5.0/jsonnetfmt_linux_arm64"],
+        executable = True
     )
     

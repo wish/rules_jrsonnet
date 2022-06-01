@@ -67,7 +67,7 @@ def define_toolchains():
             "@platforms//os:linux",
             "@platforms//cpu:arm64"
         ],
-        toolchain = ":jrsonnet_linux_arm",
+        toolchain = ":jrsonnet_linux_arm64",
         toolchain_type = "@rules_jrsonnet//jrsonnet_toolchain:toolchain",
         visibility = ["//visibility:public"]
     )

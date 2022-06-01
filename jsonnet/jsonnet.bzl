@@ -181,7 +181,7 @@ def _jsonnet_to_json_impl(ctx):
     command = (
         [
             "set -e;",
-            path,
+            "./{}".format(path),
         ] + ["-J ."] + other_args +
         ["--ext-str %s=%s" %
          (_quote(key), _quote(val)) for key, val in jsonnet_ext_strs.items()] +
